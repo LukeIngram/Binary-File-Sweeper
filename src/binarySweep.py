@@ -30,29 +30,33 @@
 
 
 
-
 import argparse
-#import logging as log <---FOR USE WITH VERBOSE OUTPUT
 import sys
 import os
 from stat import * 
 import subprocess
+import logging as log 
+import multiprocessing as multi
 
 
 
 
 #TODO add --verbose to parser, use logging module
 #       add -a flag and optional directory depth cap 
+#       add -c flag to specify the collection action set 
+#       add -r flag to specify the removal action set 
 def init_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("PATH",type=str,help="path to target directory.")
     parser.add_argument("-a",dest="all",help="sweep all subdirectories within target",action="store_true")
     parser.add_argument("-maxdepth",dest="maxdepth",type=int,help="subdirectory depth limiter, max = 9999",default=0,action="store")
-    #group1 = argparse._MutuallyExclusiveGroup()
-    #group1.add_argument("--verbose",help="verbose output",action="store_true")
+    #actionGroup = parser.add_mutually_exclusive_group()
+    logGroup = parser.add_mutually_exclusive_group()
+    logGroup.add_argument("--verbose",help="verbose output",action="store_true")
     return parser
     
 #Currently executing a unix command to get the filetype, potentually improve 
+#SLOW?????
 def isbin(path): 
     file = subprocess.Popen(('file','-b', '--mime-type',path),stdout=subprocess.PIPE)
     output = subprocess.check_output(('sed','s|/.*||'),stdin=file.stdout)
@@ -60,19 +64,18 @@ def isbin(path):
     return "application\n" == output.decode("utf-8")
 
 
-
-#TODO change directory case, to account for maxdepth.
 def sweepdir(path,depth):
-    print("searching %s"%(path))#--------------------------------------------------------------------REMOVE 
+    log.info("searching %s"%(path)) 
     for f in os.listdir(path): 
         fpath = os.path.join(path,f)
-        print("found: %s"%(fpath))#-------------------------------------------------------------------REMOVE
+        log.info("found \'%s\'"%(fpath))
         if os.access(fpath,os.W_OK): 
             if os.path.isdir(fpath): 
-                print("found dir",fpath)#------------------------------------------------------------------REMOVE
-                #sweepdir(fpath,depth-1) #TODO fork to child and call function
+                if depth > 0: 
+                    p = multi.Process(target=sweepdir,args=(fpath,depth-1))
+                    p.start()
             elif os.access(fpath,os.X_OK) and isbin(fpath): 
-                print("located binary executable: %s"%(fpath))
+                log.info("located binary executable \'%s\'"%(fpath))
     
 
 def main(): 
@@ -80,14 +83,25 @@ def main():
     args = parser.parse_args()
 
     depth = args.maxdepth
+    mode = os.W_OK
+
     if args.all:
         depth = 9999
 
-    if args.maxdepth > 9999: 
-        parser.error("maximum depth value %d too large. please specify a value less than 9999"%(args.maxdepth))
+    if args.list: 
+        mode = os.R_OK
+
+    if args.verbose: 
+        log.basicConfig(format="%(levelname)s: %(message)s", level=log.DEBUG)
+        log.info("Verbose output.")
+    else: 
+        log.basicConfig(format="%(levelname)s: %(message)s")
+
+    if args.maxdepth > 9999 or args.maxdepth < 0: 
+        parser.error("maximum depth value %d invalid. 0 < maxdepth < 10000"%(args.maxdepth))
         parser.print_help()
 
-    if os.path.isdir(args.PATH) and os.access(args.PATH,os.W_OK): 
+    if os.path.isdir(args.PATH) and os.access(args.PATH,mode): 
         sweepdir(args.PATH,depth)
 
     else:
