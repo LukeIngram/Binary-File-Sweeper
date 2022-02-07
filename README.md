@@ -10,7 +10,6 @@ Python built command line tool, for OSX & Linux. This program searches the speci
 
 - detailed readme
 - More robust method of binary identification
-- multiprocessing for subdirectory parsing
 - verbose mode handling 
 - removal mode handling 
 - collection of binary files 
